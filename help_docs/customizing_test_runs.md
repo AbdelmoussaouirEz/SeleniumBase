@@ -601,6 +601,18 @@ pytest proxy_test.py --proxy=IP_ADDRESS:PORT
 pytest proxy_test.py --proxy=USERNAME:PASSWORD@IP_ADDRESS:PORT
 ```
 
+🌐 On Google Chrome 142+, UC Mode can only answer proxy authentication once CDP Mode is active. (`self.open(url)` activates CDP Mode automatically.) If you stay in UC Mode without CDP Mode, for example with `self.uc_open_with_reconnect(url)`, run a local proxy server that holds the credentials, and connect to it without authentication:
+
+```zsh
+sbase proxy --plugins proxy.plugin.ProxyPoolPlugin --proxy-pool=USERNAME:PASSWORD@IP_ADDRESS:PORT
+```
+
+Then, in another terminal:
+
+```zsh
+pytest proxy_test.py --uc --proxy=127.0.0.1:8899
+```
+
 🌐 SeleniumBase also supports SOCKS4 and SOCKS5 proxies:
 
 ```zsh

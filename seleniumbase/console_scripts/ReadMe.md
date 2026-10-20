@@ -721,6 +721,14 @@ Runs the password decryption/unobfuscation tool.
 sbase proxy [OPTIONS]
 ```
 
+* Examples:
+
+```zsh
+sbase proxy
+sbase proxy --hostname=127.0.0.1 --port=8899
+sbase proxy --plugins proxy.plugin.ProxyPoolPlugin --proxy-pool=USER:PASS@IP:PORT
+```
+
 * Options:
 
 ```zsh
@@ -733,6 +741,9 @@ sbase proxy [OPTIONS]
 
 Launch a basic proxy server on the current machine.
 (Uses `127.0.0.1:8899` as the default address.)
+With `--proxy-pool=USER:PASS@IP:PORT`, it forwards traffic to that
+upstream proxy and handles its authentication, so the browser can
+connect to `127.0.0.1:8899` without credentials.
 
 <h3><code>download</code></h3>
 

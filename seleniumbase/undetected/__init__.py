@@ -12,6 +12,7 @@ import selenium.webdriver.chrome.webdriver
 import selenium.webdriver.common.service
 import selenium.webdriver.remote.command
 from contextlib import suppress
+from . import devtools_pipe
 from .cdp import CDP
 from .cdp import PageElement
 from .dprocess import start_detached
@@ -276,11 +277,20 @@ class Chrome(selenium.webdriver.chrome.webdriver.WebDriver):
         if "win32" in sys.platform:
             creationflags = subprocess.CREATE_NO_WINDOW
         self.options = options
+        self._devtools_pipe = None
+        # Google Chrome 142+ ignores "--load-extension" (See devtools_pipe)
+        pipe_extension_dirs = _get_extension_dirs_for_pipe(
+            options, version_main
+        )
         uc_lock = fasteners.InterProcessLock(
             constants.MultiBrowser.DRIVER_FIXING_LOCK
         )
         with uc_lock:
             if not use_subprocess:
+                for extension_dir in pipe_extension_dirs:
+                    devtools_pipe.warn_extension_not_loaded(
+                        extension_dir, "not supported if use_subprocess=False"
+                    )
                 self.browser_pid = start_detached(
                     options.binary_location, *options.arguments
                 )
@@ -290,16 +300,36 @@ class Chrome(selenium.webdriver.chrome.webdriver.WebDriver):
                     shared_utils.make_writable(
                         constants.MultiBrowser.PYAUTOGUILOCK
                     )
-                    browser = subprocess.Popen(
-                        [options.binary_location, *options.arguments],
-                        stdin=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        close_fds=IS_POSIX,
-                        creationflags=creationflags,
-                    )
-                    self.browser_pid = browser.pid
-                    self.browser_process = browser
+                    if pipe_extension_dirs:
+                        try:
+                            (
+                                self.browser_pid,
+                                self.browser_process,
+                                self._devtools_pipe,
+                            ) = devtools_pipe.launch_chrome(
+                                options.binary_location,
+                                options.arguments,
+                                creationflags,
+                            )
+                        except Exception as e:
+                            for extension_dir in pipe_extension_dirs:
+                                devtools_pipe.warn_extension_not_loaded(
+                                    extension_dir,
+                                    "%s: %s" % (e.__class__.__name__, e),
+                                )
+                    if not self._devtools_pipe:
+                        browser = subprocess.Popen(
+                            [options.binary_location, *options.arguments],
+                            stdin=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            close_fds=IS_POSIX,
+                            creationflags=creationflags,
+                        )
+                        self.browser_pid = browser.pid
+                        self.browser_process = browser
+            if self._devtools_pipe:
+                self._devtools_pipe.load_extensions(pipe_extension_dirs)
             self._process_pid = self.browser_pid
             try:
                 self._process_create_time = (
@@ -611,6 +641,8 @@ class Chrome(selenium.webdriver.chrome.webdriver.WebDriver):
             logger.debug(e, exc_info=True)
         except Exception:
             pass
+        if getattr(self, "_devtools_pipe", None):
+            self._devtools_pipe.close()
         with suppress(Exception):
             self.stop_client()
         with suppress(Exception):
@@ -695,6 +727,36 @@ class Chrome(selenium.webdriver.chrome.webdriver.WebDriver):
 
     def __hash__(self):
         return hash(self.options.debugger_address)
+
+
+def _get_extension_dirs_for_pipe(options, version_main=None):
+    """Google Chrome 142+ ignores "--load-extension", so UC Mode loads
+    those extensions over the DevTools pipe instead. Return their dirs.
+    (Not for Chromium, Chrome for Testing, etc., which still accept it.)"""
+    binary_location = str(options.binary_location).lower()
+    if any(
+        name in binary_location
+        for name in (
+            "chromium", "cft_drivers", "for testing", "brave", "opera", "comet"
+        )
+    ):
+        return []
+    with suppress(Exception):
+        if int(version_main) < 142:
+            return []
+    extension_dirs = []
+    for arg in options.arguments:
+        if arg.startswith("--load-extension="):
+            for extension_dir in arg.split("=", 1)[1].split(","):
+                if not extension_dir.strip():
+                    continue
+                extension_dir = os.path.realpath(extension_dir.strip())
+                if (
+                    os.path.isdir(extension_dir)
+                    and extension_dir not in extension_dirs
+                ):
+                    extension_dirs.append(extension_dir)
+    return extension_dirs
 
 
 def find_chrome_executable():

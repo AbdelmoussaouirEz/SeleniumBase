@@ -270,6 +270,12 @@ with ThreadPoolExecutor(max_workers=len(urls)) as executor:
 
 --------
 
+👤 <b>Extensions and proxy auth on Google Chrome 142+:</b>
+
+<b translate="no">Google Chrome</b> 142+ ignores <code translate="no">--load-extension</code>. Instead, <b translate="no">UC Mode</b> loads unpacked extensions over the DevTools pipe (<code translate="no">--remote-debugging-pipe</code>), so that they work without <b translate="no">CDP Mode</b>. That includes extensions from <code translate="no">extension_dir</code>, and the extension that handles proxy auth for <code translate="no">proxy="USER:PASS@SERVER:PORT"</code>. (<b translate="no">Chromium</b> and <b translate="no">Chrome for Testing</b> still use <code translate="no">--load-extension</code>.) If an extension can't be loaded, then a warning is displayed.
+
+--------
+
 👤 <b>What makes UC Mode work?</b>
 
 Here are the 3 primary things that <b translate="no">UC Mode</b> does to make bots appear human:
